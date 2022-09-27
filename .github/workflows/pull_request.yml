@@ -1,0 +1,110 @@
+name: Pull Request Checks
+on: [pull_request]
+
+jobs:
+  go_mod:
+    name: go mod
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - id: go-version
+        uses: juliangruber/read-file-action@v1
+        with:
+          path: ./.go-version
+
+      - uses: actions/setup-go@v3
+        with:
+          # TODO: Replace with go-version-from-file when it is supported
+          # https://github.com/actions/setup-go/pull/62
+          go-version: ${{ steps.go-version.outputs.content }}
+
+      - name: go mod
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum || \
+            (echo; echo "Unexpected difference in go.mod/go.sum files. Run 'go mod tidy' command or revert any go.mod/go.sum changes and commit."; exit 1)
+
+  go_test:
+    name: go test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - id: go-version
+        uses: juliangruber/read-file-action@v1
+        with:
+          path: ./.go-version
+
+      - uses: actions/setup-go@v3
+        with:
+          # TODO: Replace with go-version-from-file when it is supported
+          # https://github.com/actions/setup-go/pull/62
+          go-version: ${{ steps.go-version.outputs.content }}
+
+      - run: |
+          go test ./...
+          cd v2/awsv1shim && go test ./...
+
+  golangci-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - id: go-version
+        uses: juliangruber/read-file-action@v1
+        with:
+          path: ./.go-version
+
+      - uses: actions/setup-go@v3
+        with:
+          # TODO: Replace with go-version-from-file when it is supported
+          # https://github.com/actions/setup-go/pull/62
+          go-version: ${{ steps.go-version.outputs.content }}
+
+      - run: cd tools && go install github.com/golangci/golangci-lint/cmd/golangci-lint
+
+      - run: |
+          golangci-lint run ./...
+          cd v2/awsv1shim && golangci-lint run ./...
+
+  import-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - id: go-version
+        uses: juliangruber/read-file-action@v1
+        with:
+          path: ./.go-version
+
+      - uses: actions/setup-go@v3
+        with:
+          # TODO: Replace with go-version-from-file when it is supported
+          # https://github.com/actions/setup-go/pull/62
+          go-version: ${{ steps.go-version.outputs.content }}
+
+      - run: cd tools && go install github.com/pavius/impi/cmd/impi
+
+      # impi runs against the whole directory tree, ignoring modules
+      - run: impi --local . --scheme stdThirdPartyLocal ./...
+
+  semgrep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: semgrep
+        uses: returntocorp/semgrep-action@v1
+        env:
+          REWRITE_RULE_IDS: 0
+
+  markdown-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: avto-dev/markdown-lint@v1
+        with:
+          config: ".markdownlint.yml"
+          args: "./README.md"
